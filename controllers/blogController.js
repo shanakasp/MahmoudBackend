@@ -3,28 +3,56 @@ const mongoose = require("mongoose");
 const fs = require("fs");
 const Blog = require("../models/blogModel");
 const expressAsyncHandler = require("express-async-handler");
+const cloudinary = require("../utils/cloudinary");
 
 // Create a new blog - working
 const createBlog = expressAsyncHandler(async (req, res) => {
-  console.log("Incoming file: ", req.file);
   try {
-    const blog = new Blog({
+    // Log incoming file
+    console.log("Incoming file: ", req.file);
+
+    // Prepare blog data object
+    const blogData = {
       title: req.body.title,
-      blogImage: req.file ? `../uploads/${req.file.filename}` : null, // Save relative path
       summary: req.body.summary,
       description: req.body.description,
       author: req.body.author,
       facebookLink: req.body.facebookLink,
       linkedInLink: req.body.linkedInLink,
       githubLink: req.body.githubLink,
-    });
+    };
+
+    // If file is uploaded, use Cloudinary upload
+    if (req.file) {
+      try {
+        // Upload image to Cloudinary
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: "blog-uploads", // Optional: specify a folder in Cloudinary
+          // Optional: add transformations
+          transformation: [{ width: 800, height: 600, crop: "limit" }],
+        });
+
+        // Save Cloudinary image URL to blog
+        blogData.blogImage = result.secure_url;
+      } catch (uploadError) {
+        console.error("Cloudinary upload error:", uploadError);
+        return res.status(500).json({
+          message: "Error uploading image to Cloudinary",
+          error: uploadError.message,
+        });
+      }
+    }
+
+    // Create and save blog
+    const blog = new Blog(blogData);
     await blog.save();
-    res.status(200).json(blog);
-    console.log(blog);
+
+    console.log("Blog saved:", blog);
+    res.status(201).json(blog);
   } catch (error) {
-    console.error("Error in file upload or saving blog:", error); // Log any errors
+    console.error("Error in file upload or saving blog:", error);
     res.status(500).json({
-      message: error.message || "Unable to save blog post with image!",
+      message: error.message || "Unable to save blog post!",
     });
   }
 });
